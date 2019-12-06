@@ -1,2 +1,73 @@
 # Missing values
-Starting 
+In this section, we will try to analyse trends in missing values of the datset. It is important to analyse missing values' trends as they might tell something about the question we are trying to investigate, and also to see if we will be able to investigate the questions under consideration. If the data required for investigation is missing, we will have to take the help of external data sources. In other words, inspecting the trends among missing values will give a direction to our investigation. 
+
+First we will import all the required libraries which will help us in the analysis of missing values.
+```{r}
+library(naniar)
+library(tidyverse)
+library(readr)
+```
+
+Now, we will import the data which is under consideration.
+```{r}
+data <- read_csv("dataset/MVC_split.csv")
+```
+
+Here, we are starting by analysing the missing values of the whole dataset.
+```{r fig.width=7, fig.height=5}
+# full data
+full_data <- data[, -c(30, 31, 32)]
+gg_miss_upset(data3,  nsets = 16)
+```
+- Here, the horizotal bar chart (bottom-left) shows the total number of missing values in each column written on it's y-axis. 
+- The lines with dots at the bottom shows the patterns in missing values. Where, on the line, dots are plotted, it means that line represents pattern where the columns (included columns marked by dots) are missing and the vertical bar chart gives the number of missing in that pattern.
+
+Using the plot, we are able to discern that:
+1. The pattern where maximum number of values are missing is the one with "off street name", "vehicle type code 3", "vehicle type code 4", "vehicle type code 5", "contributing factor vehicle 3", "contributing factor vehicle 4", "contributing factor vehicle 5", with a total of 693390 missing values. This accounts for approximately 43% of the total values. This means that, generally, accidents include 2 vehicles. We can further look into it by getting the count of rows where all the vehicle related columns are missing to reinforce this inference.
+
+```{r}
+vehicle_data_missing <- (subset(full_data, is.na(data$`VEHICLE TYPE CODE 3`) & is.na(data$`VEHICLE TYPE CODE 4`) & is.na(data$`VEHICLE TYPE CODE 5`) & is.na(data$`CONTRIBUTING FACTOR VEHICLE 3`) & is.na(data$`CONTRIBUTING FACTOR VEHICLE 4`) & is.na(data$`CONTRIBUTING FACTOR VEHICLE 5`)))
+
+nrow(vehicle_data_missing)
+```
+After further investigation, it turns out that 91.5% of the data is consisted of accidents where at most 2 vehicles were involved. 
+
+2. Off street name is the only column where the values in it are missing when all the other columns are filled. Thus, it is clear that we cannot remove the missing values, at least in off street name as it will lead to loss of information.
+
+3. There are certain rows where all the columns in the above plot are missing and we may have to look into these rows when we will start our investigation to see if we can/should remove these are not.
+
+```{r fig.width=7, fig.height=8}
+# full data
+vis_miss(data3, sort_miss = TRUE, warn_large_data = FALSE) + 
+  labs(title = "") +
+  xlab("") 
+
+miss_var_summary(data3)
+```
+Visual representation of missing data
+No values are missing in:
+% missing % present
+table interpret
+
+```{r fig.width=7, fig.height=5}
+# subset data to find missing values in location related fields
+data2 <- data[, -c(3, 7, 20, 21, 22, 23, 24, 26, 27, 28, 29, 30, 31, 32)]
+gg_miss_upset(data2,  nsets = 6)#n_var_miss(data2))
+```
+location missing to get weather
+
+```{r}
+data3 <- subset(data, is.na(data$`ZIP CODE`) & is.na(data$LATITUDE) & is.na(data$LONGITUDE) & is.na(data$`ON STREET NAME`) & is.na(data$`CROSS STREET NAME`) & is.na(data$`OFF STREET NAME`))
+```
+
+vehicle code and contributing factor 
+
+
+```{r}
+# EDA file
+yr_data <- data[, c("Year")] %>% group_by(YEAR) %>% mutate(total=n())
+yr_data
+```
+
+missing values by years
+
