@@ -7,3 +7,11 @@ site: bookdown::bookdown_site
 
 # Introduction
 
+- Stats related to accidents, except for NY
+- Reason behind this project
+- Questions to be investigated
+- Expected results / Expectation out of the project
+
+- Vision zero investigation
+- Other stuff from EDA
+- Weather correlation inspection

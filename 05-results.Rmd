@@ -1,1 +1,200 @@
 # Results
+
+- Vision zero: overall impact (number of people killed, number of accidents), slow zones impact (number of people killed, number of accidents), ~ pedestrain crossing improvement: pedestrian deaths, a lot of cyclists killed in jan (then investigated that vision zero took certain steps), ~priority corridor, 
+
+- Weather: correlation (#accidents, #people killed, causes of accidents, type of vehicle)
+
+# #############################################################################################################
+
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# Results
+
+### Importing necessary libraries
+```{r}
+
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+library(rgdal)
+library(sp)
+library(lubridate)
+library(ggrepel)
+library(ggmap)
+```
+
+
+### Initial Exploratory Analysis of the Dataset.
+```{r}
+lethal_collisions = collisions %>% 
+  mutate(Deaths = NUMBER.OF.CYCLIST.KILLED+NUMBER.OF.MOTORIST.KILLED)
+  filter(Deaths > 0)
+
+count_collisions_by_borough = collisions %>%
+  group_by(BOROUGH) %>%
+  summarise(accidents = n())
+
+count_lethal_collisions_by_borough = lethal_collisions %>%
+  group_by(BOROUGH) %>%
+  summarise(lethal_accidents = n())
+
+how_lethal = inner_join(count_collisions_by_borough, count_lethal_collisions_by_borough, by='BOROUGH')
+# 
+how_lethal$percent_lethal = how_lethal$lethal_accidents / how_lethal$accidents
+
+mysample <- collisions[sample(1:nrow(collisions), 500,
+   replace=FALSE),]
+
+```
+
+
+```{r}
+g = ggplot(how_lethal, aes(x = BOROUGH, y = percent_lethal))
+g + geom_bar(stat='identity')
+```
+
+```{r}
+h = ggplot(how_lethal, aes(x = BOROUGH, y = lethal_accidents))
+h + geom_bar(stat='identity')
+```
+
+```{r}
+z = ggplot(mysample) 
+z +  geom_point(aes(x=LONGITUDE, y=LATITUDE, color = BOROUGH), alpha = .5) +theme_classic()
+
+```
+
+
+
+
+
+
+
+### Reading the Datasets for Weather Analysis.
+```{r}
+#Reading in the collisions dataset.
+# MVC_split <- read.csv(file="dataset/MVC_split.csv", header=TRUE, sep=",")
+
+MVC_split <- read.csv(file="dataset/nypd_motor_vehicle_collisions_crashes_sample.csv", header=TRUE, sep=",")
+
+#Changing into date format.
+MVC_split$DATE <- format(as.Date(MVC_split$DATE, "%m/%d/%Y"), "%Y-%m-%d" )
+
+#Reading in the daily weather dataset for NYC.
+WeatherByDate <- read.csv("dataset/NYC_weather.csv", header=TRUE, sep=",")
+WeatherByDate$DATE <- format(as.Date(WeatherByDate$DATE, "%Y-%m-%d"), "%Y-%m-%d" )
+#   
+#NOAA weather data
+#SNOW - Snowfall
+#PRCP - Precipitation
+```
+
+
+### Exploring the Data
+
+Let's see some of the primary reasons why accidents happen. We can infer this from the `contributing factor vehicle` column.If it is “unspecified”, we use `vehicle type code 1` instead. Summarizing the accident data.
+
+```{r}
+AccidentByDate <- MVC_split %>%
+  select (DATE, CONTRIBUTING.FACTOR.VEHICLE.1, VEHICLE.TYPE.CODE.1) %>%
+  mutate(
+    Type = ifelse(CONTRIBUTING.FACTOR.VEHICLE.1 =="Unspecified", paste0("Unspecified-", VEHICLE.TYPE.CODE.1),
+                  
+          ifelse(CONTRIBUTING.FACTOR.VEHICLE.1 =="", paste0("Unspecified-", VEHICLE.TYPE.CODE.1),  as.character(CONTRIBUTING.FACTOR.VEHICLE.1)
+          )  
+                  
+                  )
+  ) %>%
+  group_by(DATE, Type) %>%
+  summarize(
+    Freq = n()
+    
+  )
+```
+
+Let's see the most common(Top 10) reasons (or vehicles involved when reasons are unspecified) for the accidents between 2013-2019.
+
+```{r}
+AccidentFreq <- AccidentByDate %>%
+  
+  # head(20)%>%
+  group_by(Type) %>%
+  summarize(
+    Total = sum(Freq)
+  )%>%
+  arrange(desc(Total))%>%
+  head(10)
+
+ggplot(AccidentFreq, aes(x=reorder(AccidentFreq$Type,-AccidentFreq$Total),AccidentFreq$Total)) + geom_bar(stat = "identity",fill='lightblue', color="lightblue") + xlab("Types of Causes/ Vehicles Involved") + coord_flip()+
+  ylab("Frequency") +
+  theme(axis.text.x=element_text(angle=90,hjust=0.2,vjust=0.2))
+```
+
+
+Seems like the most common reason by far is Driver Inattention / Distraction. I'd like to explore if this has anything to do with weather conditions. 
+
+### What effect does weather have on accidents caused due to Driver Inattention/Distraction?
+
+```{r}
+#create water column
+WeatherByDate$Water <- WeatherByDate$PRCP + WeatherByDate$SNOW
+
+
+Inattention_AccidentByDate <- AccidentByDate %>%
+  filter(Type=="Driver Inattention/Distraction") %>%
+  select(DATE, Freq)
+
+Inattention_Accident_Weather_ByDate <- merge(Inattention_AccidentByDate,WeatherByDate,by="DATE")
+
+
+Num_of_Inattention_Accident <- Inattention_Accident_Weather_ByDate %>% 
+  summarize(
+    Total = sum(Freq)
+  )
+
+
+
+  
+
+```
+
+No. of accidents due to Driver Inattention in Good Weather:
+```{r}
+Num_of_Inattention_Accident_GoodWeather <- Inattention_Accident_Weather_ByDate %>% 
+  filter(Water ==0) %>%
+  summarize(
+    Total = sum(Freq)
+  )
+Num_of_Inattention_Accident_GoodWeather
+```
+No. of accidents due to Driver Inattention in Bad Weather:
+```{r}
+Num_of_Inattention_Accident_BadWeather <- Inattention_Accident_Weather_ByDate %>% 
+  filter(Water > 0) %>%
+  summarize(
+    Total = sum(Freq)
+  )
+Num_of_Inattention_Accident_BadWeather
+```
+
+Well, as of now the numbers dont really suggest if weather does have a certain amount of impact. Let's do a bit more digging, just to be sure.
+
+### Let's try with a Linear Regression.
+```{r}
+#only selecting bad weather or water > 0
+Inattention_Accident_Weather_ByDate <- Inattention_Accident_Weather_ByDate %>% filter(Water >0)
+
+Inattention_Accident_Weather_noDate <- Inattention_Accident_Weather_ByDate[,2:dim(Inattention_Accident_Weather_ByDate)[2]]
+
+
+# lm(Inattention_Accident_Weather_ByDate$Water~Inattention_Accident_Weather_noDate$Freq)
+
+plot(Inattention_Accident_Weather_noDate$Water,Inattention_Accident_Weather_noDate$Freq, title="Rain or Snow vs Accident Frequency (Unspecified Passenger Car)", 
+    xlab="Water(Rain or snow) amount", ylab="Accidents" )
+lines(lowess(Inattention_Accident_Weather_noDate$Water , Inattention_Accident_Weather_noDate$Freq), col="blue") # lowess line (x,y)
+```
+
+

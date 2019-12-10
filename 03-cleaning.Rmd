@@ -1,1 +1,165 @@
 # Data transformation
+
+- Data transformation
+
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# #############################################################################################################
+
+# Data transformation
+
+### Importing necessary libraries
+```{r}
+library(tidyverse)
+library(ggrepel)
+library(ggmap)
+library(lubridate)
+```
+
+### Tidying the dataset.
+```{r}
+#Reading the data file.
+
+data1 = read_csv("dataset/MVC_split.csv")
+data = read_csv("dataset/nypd_motor_vehicle_collisions_crashes_sample.csv") #Sample data, uncomment the above line to use the complete dataset and then ofcourse, comment out this line.
+data_sample = read_csv("dataset/nypd_motor_vehicle_collisions_crashes_sample.csv")
+```
+
+
+```{r}
+dim(data)
+```
+
+Let's see how our dataset looks like, it's a huge dataset with 29 variables and over 1.6 million rows. 
+
+```{r}
+head(data_sample)
+```
+
+```{r}
+colnames(data_sample)
+```
+
+Alright, as expected, its a huge dataset with a lot of variables, whereas this sample of the main dataset contains just over 50,000 observations, most of which are self-descriptive. We'll explore each of the variables a bit more if the need arises. Now, let's transform the data as per our requirements.
+
+
+Firstly, let's convert the date's into DATE class.
+
+```{r}
+#Converting the Date column into Date class.
+data_sample$DATE = as.Date(data_sample$DATE)
+```
+
+Let's check how many observations in each Borough do not have Latitude or Longitude values. This will give us a clue of what missing values to filter out, or not.
+```{r}
+data_sample %>%
+  filter(is.na(LATITUDE) | is.na(LONGITUDE))%>%
+  group_by(BOROUGH)%>%
+  summarize(count = n())
+```
+So, it seems like we have quite a few missing values for each borough, also there seem to be over 5% of the observations wherein the BOROUGH has missing values. I think we need atleast the BOROUGH information or the LATITIDE and LONGITUDE information for our analysis, and the obeservations that do not fall in either of these two cases must be filtered out. Also, there's one observation with 0 as the value for Latitude and Longitude, which is clearly an anamoly and might cause problems, which is why we're removing it.
+
+```{r}
+#Filtering out the observations with missing latitude and longitude and BOROUGH .
+data = data %>%
+  filter(!is.na(LATITUDE) & !is.na(LONGITUDE) & !is.na(BOROUGH))%>%
+  filter(LATITUDE != 0 & LONGITUDE != 0)
+```
+
+
+```{r}
+#Converting the categorical columns into factors
+cols_to_be_factors = c(3, 7:23)
+
+data[cols_to_be_factors] = lapply(data[cols_to_be_factors], factor)
+```
+
+Let's see if we need Additional Cleaning. Scatterplots are usually good to check impossibilities, and in our cases, impossibilities would be accidents happening beyond the locations on the map of New York. Let's see if there are such values, by plotting it on a map(We're using the Google Maps Static API to get the Map based on Latitude and Longitude values).
+
+#Setting API key.
+```{r}
+ggmap::register_google(key = api_key)
+```
+
+I'm using a randomly sampled subset of the original data, with about 50,000 observations for my scatter plot, since too many observations would obscure the findings from the plot.
+```{r}
+p <- ggmap(get_googlemap(center = c(Longitude= -74.0060, Latitude = 40.7128),
+                    zoom = 11, scale = 2,
+                    maptype ='terrain',
+                    color = 'color'))
+
+temp = data%>%
+  select(LATITUDE,LONGITUDE,BOROUGH)
+
+  p + 
+    geom_point(aes(x = LONGITUDE, y = LATITUDE), color = "red" , data = temp, size = 0.3, alpha = 0.1) + 
+    xlab("Longitude")+
+    ylab("Latitude")+
+    ggtitle("Accidents in NY from 2012-present")
+
+```
+After some playing around with the alpha and size parameters of the scatter plot, there seem to be a lot of accidents happening in downtown manhattan, and a few dark spots are seen in Brooklyn and Queens as well. Comparitively, Staten Island seems to have very few incidents and just a few slightly dark spots. let's investigate further.
+
+Let's have a look at Borugh-wise accidents.(Please note that I'm purposefully dropping the legend because at this level of alpha and size, the colour marker in the legend is literally unintelligible and the legend isn't really important in this case as we're looking for visual trends and dark spots, and also the coloring helps to differentiate between the boroughs.)
+```{r}
+
+  p + geom_point(aes(x = LONGITUDE, y = LATITUDE,  colour = BOROUGH), data = temp, size = 0.3, alpha = 0.2) + theme(legend.position="bottom")+ 
+    xlab("Longitude")+
+    ylab("Latitude")+
+    ggtitle("Boroughwise Accidents in NY from 2012-present")+
+  theme(legend.position="none")
+```
+
+
+Let's see the most dangerous places in terms of no. of Accidents. Since, the data specifies that the police officer usually notes down the closest intersection of street and avenue, it would be logical to find out the top ten most dangerous places based on these parameters, and I think this is the best approximation that we can get given the data.
+
+I'm first going to find out the 10 most dangerous Cross Streets.
+```{r}
+dangerous_places <- data%>%
+  filter(!is.na(`CROSS STREET NAME`)) %>%
+  group_by(LATITUDE,LONGITUDE, place = `CROSS STREET NAME`)%>%
+  summarize(count = n())%>%
+  arrange(desc(count))%>%
+  head(10)
+
+dangerous_places$Rank <- order(dangerous_places$count, decreasing = T) 
+
+dangerous_places$label <- paste(dangerous_places$Rank, dangerous_places$place, sep="-")
+```
+
+
+I'm going to try and mark these places on the map, ordered in the format (Rank-Cross Street Name).
+
+```{r}
+zoomed_p =  ggmap(get_googlemap(center = c(Longitude= -73.903131, Latitude = 40.726570),
+                    zoom = 11, scale = 2,
+                    maptype ='terrain',
+                    color = 'color'))
+zoomed_p + geom_point(aes(x = LONGITUDE, y = LATITUDE, colour = BOROUGH), data = temp, alpha=0.2, size = 0.3) + 
+  theme(legend.position="bottom")  +
+  geom_point(aes(x = LONGITUDE, y = LATITUDE, stroke = 2), colour="red", data = dangerous_places, size =1) + 
+  geom_label_repel(
+    aes(LONGITUDE, LATITUDE, label = label),
+    data=dangerous_places,
+    family = 'Times', 
+    size = 3, 
+    box.padding = 0.2, point.padding = 0.5,
+    segment.color = 'grey50') + 
+    xlab("Longitude")+
+    ylab("Latitude")+
+    ggtitle("10 most accident-prone Cross-streets")+
+  theme(legend.position="none")
+```
+
+Straight off the bat, its clearly visible that Staten Island has no cross-street within the 10 most accident-prone place. It was clearly evident that Manhattan seemed to be the most accident-prone of the 5 boroughs, and now would be a good time for a bar chart to make comparisons.
+
+```{r}
+temp<-data %>%
+  group_by(BOROUGH)%>%
+  summarize(Total = n()) 
+ggplot(temp, aes(BOROUGH,Total))+
+geom_bar( stat = )

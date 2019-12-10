@@ -1,2 +1,114 @@
 # Data sources
 
+- Challenges
+- Data sources
+- Dataset and columns explanation
+- EDA (basic trends) (boroughs over years; choropleth (number of accidents, number of people killed);
+                      collision by causes; collision by types of vehicle; lethal collisions)
+
+# Weather data
+browseURL("http://history.openweathermap.org/data/2.5/history/city?lat=40.82284&lon=-73.92876&appid=198e4de72c88a586c91caabd00f79ca6&type=hour&start=1452870915&cnt=1")
+
+
+# choropleth
+
+```{r}
+library(naniar)
+library(tidyverse)
+library(readr)
+library(maptools)
+library(ggmap)
+```
+
+```{r}
+data <- read_csv("dataset/MVC_split.csv")
+```
+
+```{r}
+register_google(key = 'AIzaSyAKu1l6cbDIDmO1ped5B-YUOrP2JywReg8')
+
+map<- get_map(location = 'manhattan, new york',zoom=12, maptype = 'roadmap',source = 'google',color = 'color')
+
+ggmap(map)
+```
+
+```{r}
+data_m = subset(data, !is.na(data$LATITUDE) & !is.na(data$LONGITUDE) & data$LATITUDE!=0 & data$LONGITUDE!=0 & data$BOROUGH=="MANHATTAN")
+
+ggmap(map) + stat_density2d(
+    aes(x = data_m$LONGITUDE, y = data_m$LATITUDE, fill = ..level.., alpha = 1),
+    size = 0.001, bins = 100, data = data_m,
+    geom = "polygon"
+  ) + scale_fill_viridis_c()
+
+#m_map = ggmap(map, base_layer = ggplot(aes(x = data_m$LONGITUDE, y = data_m$LATITUDE), data = data_m))
+
+#ggmap(map) + ggplot(data_m, aes(x=data_m$LONGITUDE, y=data_m$LATITUDE)) + geom_bin2d(bins=100)
+
+#m_map + stat_density2d(aes(x = data_m$LONGITUDE, y = data_m$LATITUDE, fill = ..level.., alpha = ..level..),
+#    bins = 20, geom = "polygon",
+#data = data_m)
+```
+
+```{r}
+data_m = subset(data, !is.na(data$LATITUDE) & !is.na(data$LONGITUDE) & data$LATITUDE!=0 & data$LONGITUDE!=0 & data$BOROUGH=="MANHATTAN")
+
+ggmap(map) + stat_density2d(
+    aes(x = data_m$LONGITUDE, y = data_m$LATITUDE, fill = data_m$`NUMBER OF PERSONS INJURED`, alpha = 0.1),
+    size = 0.1, bins = 30, data = data_m,
+    geom = "polygon"
+  ) + scale_fill_viridis_c()
+
+#m_map = ggmap(map, base_layer = ggplot(aes(x = data_m$LONGITUDE, y = data_m$LATITUDE), data = data_m))
+
+#ggmap(map) + ggplot(data_m, aes(x=data_m$LONGITUDE, y=data_m$LATITUDE)) + geom_bin2d(bins=100)
+
+#m_map + stat_density2d(aes(x = data_m$LONGITUDE, y = data_m$LATITUDE, fill = ..level.., alpha = ..level..),
+#    bins = 20, geom = "polygon",
+#data = data_m)
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+ggplot(data=data_m, aes(x=data_m$LONGITUDE, y=data_m$LATITUDE)) + geom_point(aes(alpha=.000000001)) 
+```
+
+
+# #############################################################################################################
+
+# Data sources
+
+This project explores the more recent data from NYC Open Data for Motor vehicle Collisions[Data Set](https://data.cityofnewyork.us/Public-Safety/NYPD-Motor-Vehicle-Collisions/h9gi-nx95).
+
+This dataset can also be reached and interacted with through its [Google BigQuery location](https://bigquery.cloud.google.com/table/bigquery-public-data:new_york.nypd_mv_collisions?tab=schema)
+
+### Supplementary Datasets used for Analysis.
+
+
+NOAA historical weather data: weather data collected by the station “USW00094789”, using the keyword “JFK INTERNATIONAL AIRPORT, NY US”. (https://www.climate.gov/maps-data/dataset/past-weather-zip-code-data-table). 
+
+Steps to get the data:
+(Data can be collected with zip code or county information.) 
+1.Click the link above, then click “Data Access” and choose “CDO Search” -In the Climate Data Online Search page -Choose “Daily Summaries”, Choose “Date Range”, Choose “Counties” for station -Enter “Queens, New York” and then click search -Filter data by weather station “USW00094789” or “JFK INTERNATIONAL AIRPORT, NY US”.
+
+2.Once in the result page, click “Add to cart” in Queens County, NY section, Click View Cart, Choose “Custom GHCN-Daily CSV” for output format -Once again confirm date range, click “continue” ,In custom output format, click “Select All” and “continue” -enter email address and confirm the subscription, the data file will be sent to the email address.
+
+
+
+
+#API key
+```{r}
+api_key = "AIzaSyBiUv8OS_lQQyxfz5ljAl2MaUUqJgKK_F8"
+```
+
+
+
